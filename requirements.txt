@@ -1,0 +1,17 @@
+Django>=5.1
+djangorestframework
+drf-spectacular
+django-filter
+channels[daphne]
+celery
+redis
+psycopg2-binary
+python-dotenv
+requests
+google-generativeai
+openai
+azure-storage-blob
+Pillow
+gunicorn
+uvicorn
+whitenoise
