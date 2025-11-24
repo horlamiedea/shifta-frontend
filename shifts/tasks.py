@@ -54,4 +54,4 @@ def notify_matching_professionals(shift_id):
     for pro in matching_pros:
         # Mock sending Push/SMS
         print(f"Sending notification to {pro.user.email}: New shift available at {shift.facility.name}")
-```
+

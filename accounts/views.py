@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from core.router import route
 from .services import UserRegisterService, UserLoginService, AdminVerifyFacilityService, AdminVerifyProfessionalService, ProfessionalUpdateService
 from .selectors import UserSelector
@@ -107,6 +108,7 @@ class AdminVerifyProfessionalView(APIView):
 @route("auth/waitlist/", name="waitlist-create")
 class WaitlistCreateView(APIView):
     permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
         from .models import WaitlistProfessional
@@ -116,6 +118,13 @@ class WaitlistCreateView(APIView):
         phone_number = request.data.get("phone_number")
         medical_type = request.data.get("medical_type")
         bio_data = request.data.get("bio_data")
+        location = request.data.get("location")
+        preferred_work_address = request.data.get("preferred_work_address")
+        shift_rate_9hr = request.data.get("shift_rate_9hr")
+        years_of_experience = request.data.get("years_of_experience")
+        
+        cv_file = request.FILES.get("cv_file")
+        license_file = request.FILES.get("license_file")
         
         if not email or not full_name:
              return Response({"error": "Email and Name are required"}, status=400)
@@ -128,7 +137,13 @@ class WaitlistCreateView(APIView):
             full_name=full_name,
             phone_number=phone_number,
             medical_type=medical_type,
-            bio_data=bio_data
+            bio_data=bio_data,
+            location=location,
+            preferred_work_address=preferred_work_address,
+            shift_rate_9hr=shift_rate_9hr,
+            years_of_experience=years_of_experience,
+            cv_file=cv_file,
+            license_file=license_file
         )
         
         return Response({"status": "success", "message": "Added to waitlist"}, status=201)

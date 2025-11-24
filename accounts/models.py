@@ -83,6 +83,12 @@ class WaitlistProfessional(BaseModel):
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20)
     medical_type = models.CharField(max_length=100) # e.g. Nurse, Doctor, etc.
+    cv_file = models.FileField(upload_to='waitlist/cvs/', null=True, blank=True)
+    license_file = models.FileField(upload_to='waitlist/licenses/', null=True, blank=True)
+    location = models.CharField(max_length=255, null=True, blank=True)
+    preferred_work_address = models.TextField(null=True, blank=True)
+    shift_rate_9hr = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    years_of_experience = models.IntegerField(null=True, blank=True)
     bio_data = models.TextField(null=True, blank=True) # Any other details
     
     def __str__(self):
