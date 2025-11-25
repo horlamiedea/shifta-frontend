@@ -62,12 +62,35 @@ class Facility(BaseModel):
     location_lat = models.FloatField(null=True, blank=True)
     location_lng = models.FloatField(null=True, blank=True)
     
+    # Verification Documents
+    cac_file = models.FileField(upload_to='facility/cac/', null=True, blank=True)
+    license_file = models.FileField(upload_to='facility/licenses/', null=True, blank=True)
+    other_documents = models.FileField(upload_to='facility/others/', null=True, blank=True)
+    
     # Phase 2: Wallet & Multi-Currency
     country = models.CharField(max_length=100, default='Nigeria')
     currency = models.CharField(max_length=10, default='NGN')
 
     def __str__(self):
         return self.name
+
+class FacilityStaff(BaseModel):
+    ROLE_CHOICES = (
+        ('ADMIN', 'Admin'),
+        ('MANAGER', 'Manager'),
+        ('STAFF', 'Staff'),
+    )
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='facility_staff_profile')
+    facility = models.ForeignKey(Facility, on_delete=models.CASCADE, related_name='staff_members')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='STAFF')
+    # Simple permissions for now, can be expanded to JSONField later
+    can_create_shifts = models.BooleanField(default=False)
+    can_manage_staff = models.BooleanField(default=False)
+    can_view_financials = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.role} at {self.facility.name}"
 
 class Review(BaseModel):
     reviewer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reviews_given')

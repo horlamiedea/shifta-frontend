@@ -14,6 +14,8 @@ class StandardResponseRenderer(JSONRenderer):
         if isinstance(data, dict):
             if "message" in data:
                 response_data["message"] = data.pop("message")
+            elif "error" in data:
+                response_data["message"] = data.pop("error")
             if "errors" in data:
                 response_data["errors"] = data.pop("errors")
                 response_data["success"] = False

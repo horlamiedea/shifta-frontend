@@ -6,11 +6,14 @@ from decimal import Decimal
 
 class ShiftCreateService(BaseService):
     @transaction.atomic
-    def __call__(self, user, role, specialty, quantity_needed, start_time, end_time, rate):
+    def __call__(self, user, role, specialty, quantity_needed, start_time, end_time, rate, is_negotiable=False, min_rate=None):
         if not user.is_facility:
             raise PermissionError("Only facilities can create shifts.")
         
         facility = user.facility
+        
+        if not facility.is_verified:
+            raise PermissionError("Facility must be verified to create shifts. Please upload your documents.")
         
         # Cost Calculation & Deduction (Phase 2)
         # Duration in hours
@@ -18,6 +21,12 @@ class ShiftCreateService(BaseService):
         if duration <= 0:
              raise ValueError("End time must be after start time.")
              
+        # Rate Validation (User requirement: "price cannot be set below average")
+        # For now, let's assume a hardcoded average or use min_rate if provided
+        AVERAGE_RATE = Decimal('2000.00') # Placeholder average rate
+        if rate < AVERAGE_RATE:
+            raise ValueError(f"Rate cannot be below the average rate of {AVERAGE_RATE}")
+
         # Rate is per hour per professional (as per user requirement: "put the amount for one hour... price will be 30*8")
         # So total_cost = rate * duration * quantity
         total_cost = rate *  Decimal(duration) * quantity_needed
@@ -38,7 +47,9 @@ class ShiftCreateService(BaseService):
             quantity_filled=0,
             start_time=start_time,
             end_time=end_time,
-            rate=rate # Storing hourly rate
+            rate=rate, # Storing hourly rate
+            is_negotiable=is_negotiable,
+            min_rate=min_rate
         )
         
         # Trigger notification task

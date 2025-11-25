@@ -26,14 +26,17 @@ class RegisterView(APIView):
             extra_data["rc_number"] = request.data.get("rc_number")
 
         service = UserRegisterService()
-        user, token = service(email=email, password=password, user_type=user_type, **extra_data)
-        
-        return Response({
-            "token": token,
-            "user_id": user.id,
-            "email": user.email,
-            "role": user_type
-        }, status=201)
+        try:
+            user, token = service(email=email, password=password, user_type=user_type, **extra_data)
+            
+            return Response({
+                "token": token,
+                "user_id": user.id,
+                "email": user.email,
+                "role": user_type
+            }, status=201)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("auth/login/", name="login")
 class LoginView(APIView):
@@ -44,13 +47,16 @@ class LoginView(APIView):
         password = request.data.get("password")
         
         service = UserLoginService()
-        user, token = service(email=email, password=password)
-        
-        return Response({
-            "token": token,
-            "user_id": user.id,
-            "email": user.email
-        })
+        try:
+            user, token = service(email=email, password=password)
+            
+            return Response({
+                "token": token,
+                "user_id": user.id,
+                "email": user.email
+            })
+        except ValueError as e:
+            return Response({"error": str(e)}, status=401)
 
 @route("auth/profile/", name="profile")
 class ProfileView(APIView):
@@ -72,9 +78,11 @@ class ProfileView(APIView):
             certificate_url = request.data.get("certificate_url")
             
             service = ProfessionalUpdateService()
-            service(user=user, specialties=specialties, location_lat=location_lat, location_lng=location_lng, cv_url=cv_url, certificate_url=certificate_url)
-            
-            return Response({"status": "updated"})
+            try:
+                service(user=user, specialties=specialties, location_lat=location_lat, location_lng=location_lng, cv_url=cv_url, certificate_url=certificate_url)
+                return Response({"status": "updated"})
+            except ValueError as e:
+                return Response({"error": str(e)}, status=400)
         
         return Response({"status": "not implemented for this user type"}, status=400)
 
@@ -89,9 +97,13 @@ class AdminVerifyFacilityView(APIView):
         credit_limit = request.data.get("credit_limit")
         
         service = AdminVerifyFacilityService()
-        facility = service(facility_id=facility_id, tier=tier, credit_limit=credit_limit, admin_user=request.user)
-        
-        return Response({"status": "verified", "facility": facility.name})
+        try:
+            facility = service(facility_id=facility_id, tier=tier, credit_limit=credit_limit, admin_user=request.user)
+            return Response({"status": "verified", "facility": facility.name})
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("admin/verify-professional/", name="verify-professional")
 class AdminVerifyProfessionalView(APIView):
@@ -101,9 +113,13 @@ class AdminVerifyProfessionalView(APIView):
         professional_id = request.data.get("professional_id")
         
         service = AdminVerifyProfessionalService()
-        professional = service(professional_id=professional_id, admin_user=request.user)
-        
-        return Response({"status": "verified", "professional": professional.user.email})
+        try:
+            professional = service(professional_id=professional_id, admin_user=request.user)
+            return Response({"status": "verified", "professional": professional.user.email})
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("auth/waitlist/", name="waitlist-create")
 class WaitlistCreateView(APIView):
@@ -147,4 +163,58 @@ class WaitlistCreateView(APIView):
         )
         
         return Response({"status": "success", "message": "Added to waitlist"}, status=201)
+
+@route("facility/documents/", name="facility-document-upload")
+class FacilityDocumentUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        if not request.user.is_facility:
+            return Response({"error": "Only facilities can upload documents"}, status=403)
+            
+        facility = request.user.facility
+        
+        cac_file = request.FILES.get("cac_file")
+        license_file = request.FILES.get("license_file")
+        other_documents = request.FILES.get("other_documents")
+        
+        if cac_file:
+            facility.cac_file = cac_file
+        if license_file:
+            facility.license_file = license_file
+        if other_documents:
+            facility.other_documents = other_documents
+            
+        facility.save()
+        
+        return Response({"status": "success", "message": "Documents uploaded successfully"})
+
+@route("facility/staff/", name="facility-staff-list")
+class FacilityStaffListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_facility:
+            return Response({"error": "Only facilities can view staff"}, status=403)
+            
+        facility = request.user.facility
+        # Get all staff associated with this facility
+        # Note: The FacilityStaff model links User to Facility. 
+        # We need to fetch FacilityStaff objects where facility=facility
+        from .models import FacilityStaff
+        
+        staff_members = FacilityStaff.objects.filter(facility=facility)
+        
+        data = [{
+            "id": str(s.id),
+            "email": s.user.email,
+            "role": s.role,
+            "permissions": {
+                "can_create_shifts": s.can_create_shifts,
+                "can_manage_staff": s.can_manage_staff
+            }
+        } for s in staff_members]
+        
+        return Response(data)
 

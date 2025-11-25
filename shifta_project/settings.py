@@ -150,6 +150,10 @@ REST_FRAMEWORK = {
         "core.renderers.StandardResponseRenderer",
         "rest_framework.renderers.JSONRenderer",
     ),
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ),
     "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
 }
 

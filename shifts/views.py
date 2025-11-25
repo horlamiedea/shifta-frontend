@@ -30,16 +30,23 @@ class ShiftListCreateView(APIView):
 
     def post(self, request):
         service = ShiftCreateService()
-        shift = service(
-            user=request.user,
-            role=request.data.get("role"),
-            specialty=request.data.get("specialty"),
-            quantity_needed=request.data.get("quantity_needed"),
-            start_time=request.data.get("start_time"),
-            end_time=request.data.get("end_time"),
-            rate=request.data.get("rate")
-        )
-        return Response({"id": shift.id, "status": "created"}, status=201)
+        try:
+            shift = service(
+                user=request.user,
+                role=request.data.get("role"),
+                specialty=request.data.get("specialty"),
+                quantity_needed=request.data.get("quantity_needed"),
+                start_time=request.data.get("start_time"),
+                end_time=request.data.get("end_time"),
+                rate=request.data.get("rate"),
+                is_negotiable=request.data.get("is_negotiable", False),
+                min_rate=request.data.get("min_rate")
+            )
+            return Response({"id": shift.id, "status": "created"}, status=201)
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("shifts/<uuid:shift_id>/apply/", name="shift-apply")
 class ShiftApplyView(APIView):
@@ -47,8 +54,13 @@ class ShiftApplyView(APIView):
 
     def post(self, request, shift_id):
         service = ShiftApplyService()
-        application = service(user=request.user, shift_id=shift_id)
-        return Response({"status": "applied", "application_id": application.id})
+        try:
+            application = service(user=request.user, shift_id=shift_id)
+            return Response({"status": "applied", "application_id": application.id})
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("shifts/applications/<int:application_id>/manage/", name="shift-application-manage")
 class ShiftApplicationManageView(APIView):
@@ -57,8 +69,13 @@ class ShiftApplicationManageView(APIView):
     def post(self, request, application_id):
         action = request.data.get("action") # CONFIRM or REJECT
         service = ShiftManageApplicationService()
-        service(user=request.user, application_id=application_id, action=action)
-        return Response({"status": "success"})
+        try:
+            service(user=request.user, application_id=application_id, action=action)
+            return Response({"status": "success"})
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("facility/qrcode/", name="facility-qrcode")
 class FacilityQRCodeView(APIView):
@@ -82,9 +99,13 @@ class ShiftClockInView(APIView):
         qr_code_data = request.data.get("qr_code_data")
         
         service = ClockInService()
-        service(user=request.user, shift_id=shift_id, lat=lat, lng=lng, qr_code_data=qr_code_data)
-        
-        return Response({"status": "clocked_in"})
+        try:
+            service(user=request.user, shift_id=shift_id, lat=lat, lng=lng, qr_code_data=qr_code_data)
+            return Response({"status": "clocked_in"})
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("shifts/<uuid:shift_id>/clock-out/", name="shift-clock-out")
 class ShiftClockOutView(APIView):
@@ -96,26 +117,35 @@ class ShiftClockOutView(APIView):
         qr_code_data = request.data.get("qr_code_data")
         
         service = ClockOutService()
-        service(user=request.user, shift_id=shift_id, lat=lat, lng=lng, qr_code_data=qr_code_data)
-        
-        return Response({"status": "clocked_out"})
+        try:
+            service(user=request.user, shift_id=shift_id, lat=lat, lng=lng, qr_code_data=qr_code_data)
+            return Response({"status": "clocked_out"})
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("shifts/<uuid:shift_id>/cancel/", name="shift-cancel")
 class ShiftCancelView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, shift_id):
-        if request.user.is_facility:
-            professional_id = request.data.get("professional_id")
-            service = FacilityCancelShiftService()
-            result = service(user=request.user, shift_id=shift_id, professional_id=professional_id)
-            return Response(result)
-        elif request.user.is_professional:
-            service = ProfessionalCancelShiftService()
-            result = service(user=request.user, shift_id=shift_id)
-            return Response(result)
-        else:
-            return Response({"error": "Invalid user role"}, status=403)
+        try:
+            if request.user.is_facility:
+                professional_id = request.data.get("professional_id")
+                service = FacilityCancelShiftService()
+                result = service(user=request.user, shift_id=shift_id, professional_id=professional_id)
+                return Response(result)
+            elif request.user.is_professional:
+                service = ProfessionalCancelShiftService()
+                result = service(user=request.user, shift_id=shift_id)
+                return Response(result)
+            else:
+                return Response({"error": "Invalid user role"}, status=403)
+        except PermissionError as e:
+            return Response({"error": str(e)}, status=403)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=400)
 
 @route("shifts/facility/", name="facility-shift-list")
 class FacilityShiftListView(APIView):
@@ -140,6 +170,34 @@ class FacilityShiftListView(APIView):
         } for shift in shifts]
         
         return Response(data)
+
+@route("facility/dashboard/stats/", name="facility-dashboard-stats")
+class FacilityDashboardStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_facility:
+            return Response({"error": "Only facilities can view stats"}, status=403)
+            
+        facility = request.user.facility
+        from .models import Shift, ShiftApplication
+        
+        active_shifts = Shift.objects.filter(facility=facility, status='OPEN').count()
+        # Staff on duty: Confirmed applications for shifts happening now (simplified to IN_PROGRESS or just CONFIRMED for now)
+        # For better accuracy we'd check time, but let's use status if available or just confirmed count
+        staff_on_duty = ShiftApplication.objects.filter(shift__facility=facility, status__in=['IN_PROGRESS', 'CONFIRMED']).count()
+        pending_applications = ShiftApplication.objects.filter(shift__facility=facility, status='PENDING').count()
+        
+        # Total Spent (Placeholder for Phase 2)
+        total_spent = 0 
+        
+        return Response({
+            "active_shifts": active_shifts,
+            "staff_on_duty": staff_on_duty,
+            "pending_applications": pending_applications,
+            "total_spent": total_spent,
+            "is_verified": facility.is_verified
+        })
 
 @route("shifts/professional/", name="professional-shift-list")
 class ProfessionalShiftListView(APIView):

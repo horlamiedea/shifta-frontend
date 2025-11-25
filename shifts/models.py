@@ -21,6 +21,8 @@ class Shift(BaseModel):
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
     rate = models.DecimalField(max_digits=10, decimal_places=2) # Hourly rate per professional
+    is_negotiable = models.BooleanField(default=False)
+    min_rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     # Phase 3: Location
     address = models.TextField(null=True, blank=True)
