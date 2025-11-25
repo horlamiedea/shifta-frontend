@@ -4,6 +4,25 @@ from rest_framework.permissions import IsAuthenticated
 from core.router import route
 from .models import ChatRoom, Message
 from .services import SendBroadcastService
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes, inline_serializer
+from rest_framework import serializers
+
+@extend_schema(
+    request=inline_serializer(
+        name='BroadcastMessageRequest',
+        fields={
+            'shift_id': serializers.UUIDField(),
+            'message': serializers.CharField(),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='BroadcastMessageResponse',
+            fields={'status': serializers.CharField(), 'recipients_count': serializers.IntegerField()}
+        ),
+        400: inline_serializer(name='BroadcastValidationError', fields={'error': serializers.CharField()})
+    }
+)
 
 @route("communications/broadcast/", name="broadcast-message")
 class BroadcastMessageView(APIView):
@@ -22,6 +41,21 @@ class BroadcastMessageView(APIView):
         return Response(result)
 from shifts.models import ShiftApplication
 
+@extend_schema(
+    request=inline_serializer(
+        name='ChatRoomCreateRequest',
+        fields={
+            'application_id': serializers.IntegerField(),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='ChatRoomCreateResponse',
+            fields={'room_id': serializers.IntegerField(), 'created': serializers.BooleanField()}
+        ),
+        403: inline_serializer(name='ChatRoomPermissionError', fields={'error': serializers.CharField()})
+    }
+)
 @route("chat/rooms/", name="chat-room-create")
 class ChatRoomCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -37,6 +71,19 @@ class ChatRoomCreateView(APIView):
         room, created = ChatRoom.objects.get_or_create(application=application)
         return Response({"room_id": room.id, "created": created})
 
+@extend_schema(
+    responses={
+        200: inline_serializer(
+            name='ChatHistoryResponse',
+            many=True,
+            fields={
+                'sender': serializers.EmailField(),
+                'content': serializers.CharField(),
+                'timestamp': serializers.DateTimeField()
+            }
+        )
+    }
+)
 @route("chat/rooms/<int:room_id>/messages/", name="chat-history")
 class ChatHistoryView(APIView):
     permission_classes = [IsAuthenticated]

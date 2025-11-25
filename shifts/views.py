@@ -6,6 +6,28 @@ from .services import ShiftCreateService, ShiftApplyService, ShiftManageApplicat
 from .cancellation_services import FacilityCancelShiftService, ProfessionalCancelShiftService
 from .approval_services import ApproveShiftStartService
 from .selectors import ShiftSelector
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes, inline_serializer
+from rest_framework import serializers
+
+@extend_schema(
+    parameters=[
+        OpenApiParameter(name='specialty', description='Filter by specialty', required=False, type=str),
+    ],
+    responses={
+        200: inline_serializer(
+            name='ShiftListResponse',
+            many=True,
+            fields={
+                'id': serializers.CharField(),
+                'facility': serializers.CharField(),
+                'role': serializers.CharField(),
+                'specialty': serializers.CharField(),
+                'start_time': serializers.DateTimeField(),
+                'rate': serializers.DecimalField(max_digits=10, decimal_places=2)
+            }
+        )
+    }
+)
 
 @route("shifts/", name="shift-list-create")
 class ShiftListCreateView(APIView):
@@ -28,6 +50,32 @@ class ShiftListCreateView(APIView):
         
         return Response(data)
 
+    @extend_schema(
+        request=inline_serializer(
+            name='ShiftCreateRequest',
+            fields={
+                'role': serializers.CharField(),
+                'specialty': serializers.CharField(),
+                'quantity_needed': serializers.IntegerField(),
+                'start_time': serializers.DateTimeField(),
+                'end_time': serializers.DateTimeField(),
+                'rate': serializers.DecimalField(max_digits=10, decimal_places=2),
+                'is_negotiable': serializers.BooleanField(required=False),
+                'min_rate': serializers.DecimalField(max_digits=10, decimal_places=2, required=False),
+            }
+        ),
+        responses={
+            201: inline_serializer(
+                name='ShiftCreateResponse',
+                fields={
+                    'id': serializers.UUIDField(),
+                    'status': serializers.CharField()
+                }
+            ),
+            403: inline_serializer(name='ShiftCreatePermissionError', fields={'error': serializers.CharField()}),
+            400: inline_serializer(name='ShiftCreateValidationError', fields={'error': serializers.CharField()})
+        }
+    )
     def post(self, request):
         service = ShiftCreateService()
         try:
@@ -48,6 +96,19 @@ class ShiftListCreateView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    responses={
+        200: inline_serializer(
+            name='ShiftApplyResponse',
+            fields={
+                'status': serializers.CharField(),
+                'application_id': serializers.IntegerField()
+            }
+        ),
+        403: inline_serializer(name='ApplyPermissionError', fields={'error': serializers.CharField()}),
+        400: inline_serializer(name='ApplyValidationError', fields={'error': serializers.CharField()})
+    }
+)
 @route("shifts/<uuid:shift_id>/apply/", name="shift-apply")
 class ShiftApplyView(APIView):
     permission_classes = [IsAuthenticated]
@@ -62,6 +123,22 @@ class ShiftApplyView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    request=inline_serializer(
+        name='ShiftApplicationManageRequest',
+        fields={
+            'action': serializers.ChoiceField(choices=['CONFIRM', 'REJECT']),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='ShiftApplicationManageResponse',
+            fields={'status': serializers.CharField()}
+        ),
+        403: inline_serializer(name='ManagePermissionError', fields={'error': serializers.CharField()}),
+        400: inline_serializer(name='ManageValidationError', fields={'error': serializers.CharField()})
+    }
+)
 @route("shifts/applications/<int:application_id>/manage/", name="shift-application-manage")
 class ShiftApplicationManageView(APIView):
     permission_classes = [IsAuthenticated]
@@ -77,6 +154,15 @@ class ShiftApplicationManageView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    responses={
+        200: inline_serializer(
+            name='FacilityQRCodeResponse',
+            fields={'qr_data': serializers.CharField()}
+        ),
+        403: inline_serializer(name='QRCodePermissionError', fields={'error': serializers.CharField()})
+    }
+)
 @route("facility/qrcode/", name="facility-qrcode")
 class FacilityQRCodeView(APIView):
     permission_classes = [IsAuthenticated]
@@ -89,6 +175,24 @@ class FacilityQRCodeView(APIView):
         # Frontend will generate the QR image from this string.
         return Response({"qr_data": str(request.user.facility.id)})
 
+@extend_schema(
+    request=inline_serializer(
+        name='ShiftClockInRequest',
+        fields={
+            'lat': serializers.FloatField(),
+            'lng': serializers.FloatField(),
+            'qr_code_data': serializers.CharField(),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='ShiftClockInResponse',
+            fields={'status': serializers.CharField()}
+        ),
+        403: inline_serializer(name='ClockInPermissionError', fields={'error': serializers.CharField()}),
+        400: inline_serializer(name='ClockInValidationError', fields={'error': serializers.CharField()})
+    }
+)
 @route("shifts/<uuid:shift_id>/clock-in/", name="shift-clock-in")
 class ShiftClockInView(APIView):
     permission_classes = [IsAuthenticated]
@@ -107,6 +211,24 @@ class ShiftClockInView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    request=inline_serializer(
+        name='ShiftClockOutRequest',
+        fields={
+            'lat': serializers.FloatField(),
+            'lng': serializers.FloatField(),
+            'qr_code_data': serializers.CharField(),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='ShiftClockOutResponse',
+            fields={'status': serializers.CharField()}
+        ),
+        403: inline_serializer(name='ClockOutPermissionError', fields={'error': serializers.CharField()}),
+        400: inline_serializer(name='ClockOutValidationError', fields={'error': serializers.CharField()})
+    }
+)
 @route("shifts/<uuid:shift_id>/clock-out/", name="shift-clock-out")
 class ShiftClockOutView(APIView):
     permission_classes = [IsAuthenticated]
@@ -125,6 +247,22 @@ class ShiftClockOutView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    request=inline_serializer(
+        name='ShiftCancelRequest',
+        fields={
+            'professional_id': serializers.CharField(required=False, help_text='Required for facility cancellation'),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='ShiftCancelResponse',
+            fields={'status': serializers.CharField(), 'message': serializers.CharField(required=False)}
+        ),
+        403: inline_serializer(name='CancelPermissionError', fields={'error': serializers.CharField()}),
+        400: inline_serializer(name='CancelValidationError', fields={'error': serializers.CharField()})
+    }
+)
 @route("shifts/<uuid:shift_id>/cancel/", name="shift-cancel")
 class ShiftCancelView(APIView):
     permission_classes = [IsAuthenticated]
@@ -147,6 +285,25 @@ class ShiftCancelView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    responses={
+        200: inline_serializer(
+            name='FacilityShiftListResponse',
+            many=True,
+            fields={
+                'id': serializers.UUIDField(),
+                'role': serializers.CharField(),
+                'start_time': serializers.DateTimeField(),
+                'end_time': serializers.DateTimeField(),
+                'status': serializers.CharField(),
+                'quantity_needed': serializers.IntegerField(),
+                'quantity_filled': serializers.IntegerField(),
+                'rate': serializers.DecimalField(max_digits=10, decimal_places=2)
+            }
+        ),
+        403: inline_serializer(name='FacilityShiftListPermissionError', fields={'error': serializers.CharField()})
+    }
+)
 @route("shifts/facility/", name="facility-shift-list")
 class FacilityShiftListView(APIView):
     permission_classes = [IsAuthenticated]
@@ -171,6 +328,21 @@ class FacilityShiftListView(APIView):
         
         return Response(data)
 
+@extend_schema(
+    responses={
+        200: inline_serializer(
+            name='FacilityDashboardStatsResponse',
+            fields={
+                'active_shifts': serializers.IntegerField(),
+                'staff_on_duty': serializers.IntegerField(),
+                'pending_applications': serializers.IntegerField(),
+                'total_spent': serializers.DecimalField(max_digits=12, decimal_places=2),
+                'is_verified': serializers.BooleanField()
+            }
+        ),
+        403: inline_serializer(name='StatsPermissionError', fields={'error': serializers.CharField()})
+    }
+)
 @route("facility/dashboard/stats/", name="facility-dashboard-stats")
 class FacilityDashboardStatsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -199,6 +371,24 @@ class FacilityDashboardStatsView(APIView):
             "is_verified": facility.is_verified
         })
 
+@extend_schema(
+    responses={
+        200: inline_serializer(
+            name='ProfessionalShiftListResponse',
+            many=True,
+            fields={
+                'id': serializers.UUIDField(),
+                'facility': serializers.CharField(),
+                'role': serializers.CharField(),
+                'start_time': serializers.DateTimeField(),
+                'end_time': serializers.DateTimeField(),
+                'rate': serializers.DecimalField(max_digits=10, decimal_places=2),
+                'distance': serializers.CharField()
+            }
+        ),
+        403: inline_serializer(name='ProfShiftListPermissionError', fields={'error': serializers.CharField()})
+    }
+)
 @route("shifts/professional/", name="professional-shift-list")
 class ProfessionalShiftListView(APIView):
     permission_classes = [IsAuthenticated]

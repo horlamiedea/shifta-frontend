@@ -5,6 +5,38 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from core.router import route
 from .services import UserRegisterService, UserLoginService, AdminVerifyFacilityService, AdminVerifyProfessionalService, ProfessionalUpdateService
 from .selectors import UserSelector
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes, inline_serializer
+from rest_framework import serializers
+
+@extend_schema(
+    request=inline_serializer(
+        name='RegisterRequest',
+        fields={
+            'email': serializers.EmailField(),
+            'password': serializers.CharField(),
+            'user_type': serializers.ChoiceField(choices=['professional', 'facility']),
+            'license_number': serializers.CharField(required=False, help_text='Required for professionals'),
+            'name': serializers.CharField(required=False, help_text='Required for facilities'),
+            'address': serializers.CharField(required=False, help_text='Required for facilities'),
+            'rc_number': serializers.CharField(required=False, help_text='Required for facilities'),
+        }
+    ),
+    responses={
+        201: inline_serializer(
+            name='RegisterResponse',
+            fields={
+                'token': serializers.CharField(),
+                'user_id': serializers.UUIDField(),
+                'email': serializers.EmailField(),
+                'role': serializers.CharField()
+            }
+        ),
+        400: inline_serializer(
+            name='ErrorResponse',
+            fields={'error': serializers.CharField()}
+        )
+    }
+)
 
 @route("auth/register/", name="register")
 class RegisterView(APIView):
@@ -38,6 +70,29 @@ class RegisterView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    request=inline_serializer(
+        name='LoginRequest',
+        fields={
+            'email': serializers.EmailField(),
+            'password': serializers.CharField()
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='LoginResponse',
+            fields={
+                'token': serializers.CharField(),
+                'user_id': serializers.UUIDField(),
+                'email': serializers.EmailField()
+            }
+        ),
+        401: inline_serializer(
+            name='LoginErrorResponse',
+            fields={'error': serializers.CharField()}
+        )
+    }
+)
 @route("auth/login/", name="login")
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -58,6 +113,21 @@ class LoginView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=401)
 
+@extend_schema(
+    responses={
+        200: inline_serializer(
+            name='ProfileResponse',
+            fields={
+                'id': serializers.UUIDField(),
+                'email': serializers.EmailField(),
+                'first_name': serializers.CharField(),
+                'last_name': serializers.CharField(),
+                'role': serializers.CharField(),
+                # Add other fields as returned by UserSelector.get_profile_data
+            }
+        )
+    }
+)
 @route("auth/profile/", name="profile")
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -67,6 +137,28 @@ class ProfileView(APIView):
         data = selector.get_profile_data(request.user)
         return Response(data)
 
+    @extend_schema(
+        request=inline_serializer(
+            name='ProfileUpdateRequest',
+            fields={
+                'specialties': serializers.ListField(child=serializers.CharField(), required=False),
+                'location_lat': serializers.FloatField(required=False),
+                'location_lng': serializers.FloatField(required=False),
+                'cv_url': serializers.URLField(required=False),
+                'certificate_url': serializers.URLField(required=False),
+            }
+        ),
+        responses={
+            200: inline_serializer(
+                name='ProfileUpdateResponse',
+                fields={'status': serializers.CharField()}
+            ),
+            400: inline_serializer(
+                name='ProfileUpdateErrorResponse',
+                fields={'error': serializers.CharField()}
+            )
+        }
+    )
     def put(self, request):
         user = request.user
         # Only professionals for now based on Epic 2
@@ -87,6 +179,27 @@ class ProfileView(APIView):
         return Response({"status": "not implemented for this user type"}, status=400)
 
 
+@extend_schema(
+    request=inline_serializer(
+        name='AdminVerifyFacilityRequest',
+        fields={
+            'facility_id': serializers.CharField(),
+            'tier': serializers.IntegerField(),
+            'credit_limit': serializers.DecimalField(max_digits=12, decimal_places=2),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='AdminVerifyFacilityResponse',
+            fields={
+                'status': serializers.CharField(),
+                'facility': serializers.CharField()
+            }
+        ),
+        403: inline_serializer(name='PermissionError', fields={'error': serializers.CharField()}),
+        400: inline_serializer(name='ValidationError', fields={'error': serializers.CharField()})
+    }
+)
 @route("admin/verify-facility/", name="verify-facility")
 class AdminVerifyFacilityView(APIView):
     permission_classes = [IsAuthenticated] # Should be IsAdminUser really
@@ -105,6 +218,25 @@ class AdminVerifyFacilityView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    request=inline_serializer(
+        name='AdminVerifyProfessionalRequest',
+        fields={
+            'professional_id': serializers.CharField(),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='AdminVerifyProfessionalResponse',
+            fields={
+                'status': serializers.CharField(),
+                'professional': serializers.CharField()
+            }
+        ),
+        403: inline_serializer(name='ProfPermissionError', fields={'error': serializers.CharField()}),
+        400: inline_serializer(name='ProfValidationError', fields={'error': serializers.CharField()})
+    }
+)
 @route("admin/verify-professional/", name="verify-professional")
 class AdminVerifyProfessionalView(APIView):
     permission_classes = [IsAuthenticated]
@@ -121,6 +253,41 @@ class AdminVerifyProfessionalView(APIView):
         except ValueError as e:
             return Response({"error": str(e)}, status=400)
 
+@extend_schema(
+    request=inline_serializer(
+        name='WaitlistCreateRequest',
+        fields={
+            'email': serializers.EmailField(),
+            'full_name': serializers.CharField(),
+            'phone_number': serializers.CharField(required=False),
+            'medical_type': serializers.CharField(required=False),
+            'bio_data': serializers.CharField(required=False),
+            'location': serializers.CharField(required=False),
+            'preferred_work_address': serializers.CharField(required=False),
+            'shift_rate_9hr': serializers.DecimalField(max_digits=10, decimal_places=2, required=False),
+            'years_of_experience': serializers.IntegerField(required=False),
+            'cv_file': serializers.FileField(required=False),
+            'license_file': serializers.FileField(required=False),
+        }
+    ),
+    responses={
+        201: inline_serializer(
+            name='WaitlistCreateResponse',
+            fields={
+                'status': serializers.CharField(),
+                'message': serializers.CharField()
+            }
+        ),
+        200: inline_serializer(
+            name='WaitlistExistingResponse',
+            fields={'message': serializers.CharField()}
+        ),
+        400: inline_serializer(
+            name='WaitlistErrorResponse',
+            fields={'error': serializers.CharField()}
+        )
+    }
+)
 @route("auth/waitlist/", name="waitlist-create")
 class WaitlistCreateView(APIView):
     permission_classes = [AllowAny]
@@ -164,6 +331,26 @@ class WaitlistCreateView(APIView):
         
         return Response({"status": "success", "message": "Added to waitlist"}, status=201)
 
+@extend_schema(
+    request=inline_serializer(
+        name='FacilityDocumentUploadRequest',
+        fields={
+            'cac_file': serializers.FileField(required=False),
+            'license_file': serializers.FileField(required=False),
+            'other_documents': serializers.FileField(required=False),
+        }
+    ),
+    responses={
+        200: inline_serializer(
+            name='FacilityDocumentUploadResponse',
+            fields={
+                'status': serializers.CharField(),
+                'message': serializers.CharField()
+            }
+        ),
+        403: inline_serializer(name='DocPermissionError', fields={'error': serializers.CharField()})
+    }
+)
 @route("facility/documents/", name="facility-document-upload")
 class FacilityDocumentUploadView(APIView):
     permission_classes = [IsAuthenticated]
@@ -190,6 +377,27 @@ class FacilityDocumentUploadView(APIView):
         
         return Response({"status": "success", "message": "Documents uploaded successfully"})
 
+@extend_schema(
+    responses={
+        200: inline_serializer(
+            name='FacilityStaffListResponse',
+            many=True,
+            fields={
+                'id': serializers.CharField(),
+                'email': serializers.EmailField(),
+                'role': serializers.CharField(),
+                'permissions': inline_serializer(
+                    name='StaffPermissions',
+                    fields={
+                        'can_create_shifts': serializers.BooleanField(),
+                        'can_manage_staff': serializers.BooleanField()
+                    }
+                )
+            }
+        ),
+        403: inline_serializer(name='StaffListPermissionError', fields={'error': serializers.CharField()})
+    }
+)
 @route("facility/staff/", name="facility-staff-list")
 class FacilityStaffListView(APIView):
     permission_classes = [IsAuthenticated]
